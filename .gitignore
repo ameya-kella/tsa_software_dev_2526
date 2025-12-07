@@ -1,0 +1,28 @@
+# ---- Large data ----
+raw_videos/
+npy_landmarks/
+*.mp4
+*.avi
+*.mkv
+*.npy
+
+# ---- Logs ----
+logs/
+*.log
+output_landmarks_log.txt
+
+# ---- Python cache ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ---- Virtual environments ----
+venv/
+.env/
+.venv/
+env/
+
+# ---- Misc ----
+.DS_Store
+Thumbs.db
