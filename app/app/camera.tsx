@@ -47,7 +47,7 @@ export default function CameraScreen() {
   };
 
   const handleTranslateSign = () => {
-    // 👉 later this will call backend and use real model output
+
     const fakeRecognizedText = "HELLO, HOW ARE YOU?";
 
     router.push({
