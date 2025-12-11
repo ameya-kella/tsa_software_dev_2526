@@ -40,7 +40,7 @@ export default function CameraScreen() {
 
       console.log("Captured photo:", photo);
       setLastPhotoUri(photo.uri);
-      // later: send this photo (or multiple) to backend
+      
     } catch (err) {
       console.error("Error capturing photo:", err);
     }
