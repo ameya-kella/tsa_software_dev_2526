@@ -4,58 +4,55 @@ import { Link } from "expo-router";
 export default function HomeScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>ASL Translator</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>title</Text>
+        <Text style={styles.subtitle}>
+          real-time accessibility for dead/hoh and hearing conversations.
+        </Text>
+      </View>
 
-      <Link href="/camera" asChild>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>open Camera</Text>
+      <View style={styles.cardGrid}>
+        <Link href="/camera" asChild>
+          <TouchableOpacity style={styles.card}>
+            <Text style={styles.cardTitle}>Live Interpreter</Text>
+            <Text style={styles.cardDesc}>ASL → Text → Speech</Text>
+            <Text style={styles.cardFoot}>use camera • live transcript</Text>
+          </TouchableOpacity>
+        </Link>
+
+        <TouchableOpacity style={[styles.card, styles.cardDisabled]} activeOpacity={0.8}>
+          <Text style={styles.cardTitle}>placeholder</Text>
+          <Text style={styles.cardDesc}>idk</Text>
+          <Text style={styles.cardFoot}>ur mom</Text>
         </TouchableOpacity>
-      </Link>
+      </View>
 
-      <Link href="/output" asChild>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>idk</Text>
-        </TouchableOpacity>
-      </Link>
-
-      <TouchableOpacity style={styles.secondaryButton}>
-        <Text style={styles.secondaryText}>ur mom</Text>
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+           ensure hands are fully in frame & good lighting.
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center",
-    backgroundColor: "#111" 
+  container: { flex: 1, backgroundColor: "#0b1220", padding: 18, justifyContent: "space-between" },
+  header: { paddingTop: 32 },
+  title: { color: "white", fontSize: 34, fontWeight: "800", letterSpacing: 0.2 },
+  subtitle: { color: "rgba(255,255,255,0.75)", marginTop: 8, fontSize: 14, lineHeight: 20, maxWidth: 320 },
+  cardGrid: { gap: 14, marginTop: 18 },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    padding: 16,
   },
-  title: { 
-    fontSize: 32, 
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 40
-  },
-  button: {
-    width: 250,
-    padding: 20,
-    backgroundColor: "#4CAF50",
-    borderRadius: 12,
-    marginBottom: 20
-  },
-  buttonText: { 
-    fontSize: 18, 
-    textAlign: "center",
-    fontWeight: "600",
-    color: "white"
-  },
-  secondaryButton: {
-    marginTop: 20,
-  },
-  secondaryText: {
-    color: "white",
-    opacity: 0.6
-  }
+  cardDisabled: { opacity: 0.55 },
+  cardTitle: { color: "white", fontSize: 18, fontWeight: "800" },
+  cardDesc: { color: "rgba(255,255,255,0.8)", marginTop: 6, fontSize: 14, fontWeight: "600" },
+  cardFoot: { color: "rgba(255,255,255,0.55)", marginTop: 10, fontSize: 12 },
+  footer: { paddingBottom: 18 },
+  footerText: { color: "rgba(255,255,255,0.55)", fontSize: 12 },
 });
