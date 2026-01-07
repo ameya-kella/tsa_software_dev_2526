@@ -1,3 +1,4 @@
+node_modules
 # ---- Large data ----
 raw_videos/
 npy_landmarks/
