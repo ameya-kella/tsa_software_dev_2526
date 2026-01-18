@@ -1,0 +1,81 @@
+# backend/server.py
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+import numpy as np
+
+from backend.inference.predictor import LiveASLPredictor
+from backend.inference.sentence import generate_sentence_from_words
+from backend.inference.config import TFLITE_MODEL_PATH, ORD2SIGN
+
+# -------------------------
+# FastAPI setup
+# -------------------------
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # adjust for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -------------------------
+# Predictor instance
+# -------------------------
+predictor = LiveASLPredictor(TFLITE_MODEL_PATH, ORD2SIGN)
+recognized_words = []
+
+# -------------------------
+# Helper to append new sign if valid
+# -------------------------
+def append_word(sign, confidence):
+    if confidence is not None and sign not in ("—", "TV"):
+        if not recognized_words or sign != recognized_words[-1]:
+            recognized_words.append(sign)
+
+# -------------------------
+# WebSocket endpoint
+# -------------------------
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
+    print("WebSocket connected")
+    
+    while True:
+        try:
+            data = await ws.receive_json()
+            
+            # Get landmarks sent from frontend (543 x 3)
+            landmarks = np.array(data.get("landmarks", []), dtype=np.float32)
+            if landmarks.size == 0:
+                continue  # skip empty frames
+            
+            # -------------------------
+            # Update predictor and live words
+            # -------------------------
+            sign, confidence, top5 = predictor.update(landmarks)
+            append_word(sign, confidence)
+
+            # -------------------------
+            # Check if client wants to generate sentence
+            # -------------------------
+            generate_sentence_flag = data.get("generate_sentence", False)
+            sentence = ""
+            if generate_sentence_flag and recognized_words:
+                sentence = generate_sentence_from_words(recognized_words)
+                recognized_words.clear()
+
+            # -------------------------
+            # Send back current state
+            # -------------------------
+            await ws.send_json({
+                "current_sign": sign,
+                "confidence": confidence,
+                "top5": top5,
+                "recognized_words": recognized_words,
+                "generated_sentence": sentence
+            })
+
+        except Exception as e:
+            print("WebSocket disconnected:", e)
+            break

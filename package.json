@@ -1,6 +1,8 @@
 {
   "main": "expo-router/entry",
   "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/holistic": "^0.5.1675471629",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.9.3",
     "expo": "~54.0.31",
