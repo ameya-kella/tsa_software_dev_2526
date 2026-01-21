@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
@@ -88,6 +88,27 @@ const loadMediapipeScripts = () => {
     }),
   ]);
 };
+// -------------------------
+// Conversation storage (local)
+// -------------------------
+type ChatMsg = {
+  id: string;
+  sender: "deaf" | "hearing";
+  text: string;
+  ts: number;
+};
+
+const CHAT_KEY = "conversation_messages_v1";
+
+const appendChatMessage = async (msg: ChatMsg) => {
+  try {
+    const raw = await AsyncStorage.getItem(CHAT_KEY);
+    const prev: ChatMsg[] = raw ? JSON.parse(raw) : [];
+    await AsyncStorage.setItem(CHAT_KEY, JSON.stringify([...prev, msg]));
+  } catch (e) {
+    console.log("appendChatMessage error", e);
+  }
+};
 
 // -------------------------
 // Main Component
@@ -97,6 +118,8 @@ export default function CameraScreen() {
   const cameraRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const router = useRouter();
+const params = useLocalSearchParams<{ mode?: string }>();
+const isConversationMode = params?.mode === "conversation";
 
   const [isFrozen, setIsFrozen] = useState(false);
   const [lastPhotoUri, setLastPhotoUri] = useState<string | null>(null);
@@ -351,25 +374,39 @@ export default function CameraScreen() {
     sendLandmarks(lastFrameLandmarksRef.current, true);
   };
 
-  const handleSendToOutput = () => {
-    const lastWord = detectedWords[detectedWords.length - 1] || liveText;
+const handleSendToOutput = async () => {
+  const lastWord = detectedWords[detectedWords.length - 1] || liveText;
 
-    // 🔒 lock last word so it doesn’t reappear immediately
-    if (lastWord && lastWord !== "—") {
-      lockedWordRef.current = lastWord;
-    }
+  // 🔒 lock last word so it doesn’t reappear immediately
+  if (lastWord && lastWord !== "—") {
+    lockedWordRef.current = lastWord;
+  }
 
-    const finalText = (generatedSentence || lastWord || "—").trim();
+  const finalText = (generatedSentence || lastWord || "—").trim();
 
-    // 🧹 clear interpreter state
-    handleClear();
+  // 🧹 clear interpreter state
+  handleClear();
 
-    // ➜ navigate after clearing
-    router.push({
-      pathname: "/output",
-      params: { text: finalText },
+  // ✅ conversation mode: save + go to hearing turn
+  if (isConversationMode) {
+    await appendChatMessage({
+      id: String(Date.now()),
+      sender: "deaf",
+      text: finalText,
+      ts: Date.now(),
     });
-  };
+
+    router.push("/conversation");
+    return;
+  }
+
+  // normal interpreter mode: go to output TTS screen
+  router.push({
+    pathname: "/output",
+    params: { text: finalText },
+  });
+};
+
 
   const handleClear = () => {
       hasAutoSentRef.current = false;

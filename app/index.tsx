@@ -48,13 +48,16 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </Link>
 
-        <Link href="/camera" asChild>
-          <TouchableOpacity style={styles.card}>
-            <Text style={styles.cardTitle}>Live Conversation</Text>
-            <Text style={styles.cardDesc}>Interpreter + Speech-to-Text</Text>
-            <Text style={styles.cardFoot}>Bridging the gap: seamless communication between deaf and non-ASL speakers.</Text>
-          </TouchableOpacity>
-        </Link>
+<Link href="/camera?mode=conversation" asChild>
+  <TouchableOpacity style={styles.card}>
+    <Text style={styles.cardTitle}>Live Conversation</Text>
+    <Text style={styles.cardDesc}>Interpreter + Speech-to-Text</Text>
+    <Text style={styles.cardFoot}>
+      Bridging the gap: seamless communication between deaf and non-ASL speakers.
+    </Text>
+  </TouchableOpacity>
+</Link>
+
       </View>
       <View style={styles.cardGrid}>
 
