@@ -101,7 +101,7 @@ export default function CameraScreen() {
   const [isFrozen, setIsFrozen] = useState(false);
   const [lastPhotoUri, setLastPhotoUri] = useState<string | null>(null);
   const [liveText, setLiveText] = useState("—");
-  const [generatedSentence, setGeneratedSentence] = useState("Creating sentence...");
+  const [generatedSentence, setGeneratedSentence] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(0);
 
   const [hasGeneratedSentence, setHasGeneratedSentence] = useState(false);
@@ -120,6 +120,8 @@ export default function CameraScreen() {
   const ignoreUntilSignChangeRef = useRef(false);
   const lastSentWordRef = useRef<string | null>(null);
   const lockedWordRef = useRef<string | null>(null);
+  const hasAutoSentRef = useRef(false);
+
 
   // -------------------------
   // WebSocket
@@ -168,7 +170,12 @@ export default function CameraScreen() {
 
 
       if (data.confidence !== null) setConfidence(data.confidence);
-      if (data.generated_sentence) setGeneratedSentence(data.generated_sentence);
+      if (typeof data.generated_sentence === "string") {
+        const sentence = data.generated_sentence.trim();
+        if (sentence.length > 0) {
+          setGeneratedSentence(sentence);
+        }
+      }
     };
 
 
@@ -292,7 +299,20 @@ export default function CameraScreen() {
     
     loadAutomatedState();
   }, []);
-  
+
+  useEffect(() => {
+    if (
+      isAutomated &&
+      hasGeneratedSentence &&
+      generatedSentence &&
+      !hasAutoSentRef.current
+    ) {
+      hasAutoSentRef.current = true;
+      handleSendToOutput();
+    }
+  }, [isAutomated, hasGeneratedSentence, generatedSentence]);
+
+
   // -------------------------
   // Pause / Resume
   // -------------------------
@@ -352,6 +372,7 @@ export default function CameraScreen() {
   };
 
   const handleClear = () => {
+      hasAutoSentRef.current = false;
     // 🔒 lock whatever word is currently being detected
     if (liveText && liveText !== "—") {
       lockedWordRef.current = liveText;
@@ -436,13 +457,12 @@ export default function CameraScreen() {
           <Text style={styles.label}>
             {hasGeneratedSentence ? "GENERATED SENTENCE" : "INDIVIDUAL WORDS"}
           </Text>
-
           <Text style={styles.stableText}>
-            {hasGeneratedSentence
-              ? generatedSentence || "Waiting for a confident phrase…"
-              : detectedWords.length
-                ? detectedWords.join(" ")
-                : "—"}
+          {hasGeneratedSentence
+            ? generatedSentence || "Creating sentence..."
+            : detectedWords.length
+              ? detectedWords.join(" ")
+              : "—"}
           </Text>
         </View>
 
