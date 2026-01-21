@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 // -------------------------
 // Landmark indices
@@ -105,6 +107,8 @@ export default function CameraScreen() {
   const [hasGeneratedSentence, setHasGeneratedSentence] = useState(false);
   const [detectedWords, setDetectedWords] = useState<string[]>([]);
   const lastDetectedWordRef = useRef<string | null>(null);
+  
+  const [isAutomated, setIsAutomated] = useState(false);
 
   const isRunningRef = useRef(true);
   const lastFrameLandmarksRef = useRef<number[][] | null>(null);
@@ -270,7 +274,25 @@ export default function CameraScreen() {
     loop();
     return () => { isCancelled = true; };
   }, [permission?.granted]);
-
+  
+  // -------------------------
+  // Toggle button
+  // -------------------------
+  useEffect(() => {
+    const loadAutomatedState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem('isAutomated');
+        if (savedState !== null) {
+          setIsAutomated(JSON.parse(savedState));  // Set the initial toggle state
+        }
+      } catch (error) {
+        console.error("Error loading automated state from AsyncStorage", error);
+      }
+    };
+    
+    loadAutomatedState();
+  }, []);
+  
   // -------------------------
   // Pause / Resume
   // -------------------------
@@ -363,40 +385,42 @@ export default function CameraScreen() {
       </TouchableOpacity>
     </View>
   );
-
-  const confidenceLabel = confidence >= 0.8 ? "High" : confidence >= 0.6 ? "Medium" : "Low";
-  const confidencePillStyle = confidence >= 0.8 ? styles.pillGood : confidence >= 0.6 ? styles.pillMid : styles.pillBad;
-
   return (
     <View style={styles.container}>
       <View style={styles.cameraWrap}>
+        {/* Camera view */}
         {Platform.OS === "web" ? (
           <video ref={videoRef} autoPlay style={styles.camera} />
         ) : (
           <CameraView ref={cameraRef} style={styles.camera} facing="front" />
         )}
 
-        <View style={styles.overlayTop}>
-          <Text style={styles.overlayTitle}>Live Interpreter</Text>
-          <View style={[styles.pill, confidencePillStyle]}>
-            <Text style={styles.pillText}>{confidenceLabel} • {Math.round(confidence*100)}%</Text>
-          </View>
-        </View>
-
-        <View style={styles.guideBox}>
-          <Text style={styles.guideText}>
-            {isFrozen ? "Frozen frame (confirm translation)" : "Keep hands inside the box"}
-          </Text>
-        </View>
-
-        {lastPhotoUri && (
-          <View style={styles.thumb}>
-            <Image source={{ uri: lastPhotoUri }} style={styles.thumbImg} />
-            <Text style={styles.thumbLabel}>Paused</Text>
+        {/* Overlay "PAUSED" text if paused */}
+        {isFrozen && (
+          <View style={styles.pausedOverlay}>
+            <Text style={styles.pausedText}>PAUSED</Text>
           </View>
         )}
       </View>
 
+      <View style={styles.overlayTop}>
+        <Text style={styles.overlayTitle}>Live Interpreter</Text>
+        
+        {/* Home Icon Button */}
+        <TouchableOpacity style={styles.homeButton} onPress={() => router.push('/')}>
+          <Ionicons name="home" size={28} color="white" /> {/* Home icon */}
+        </TouchableOpacity>
+      </View>
+
+      {/* Image of the paused frame */}
+      {lastPhotoUri && (
+        <View style={styles.thumb}>
+          <Image source={{ uri: lastPhotoUri }} style={styles.thumbImg} />
+          <Text style={styles.thumbLabel}>Paused</Text>
+        </View>
+      )}
+
+      {/* Transcript and controls */}
       <View style={styles.panel}>
         <View style={styles.rowBetween}>
           <Text style={styles.panelTitle}>Transcript</Text>
@@ -427,27 +451,51 @@ export default function CameraScreen() {
             <Text style={styles.smallBtnText}>{isFrozen ? "Resume" : "Pause"}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.smallBtn} onPress={handleGenerateSentence}>
-            <Text style={styles.smallBtnText}>Generate Sentence</Text>
-          </TouchableOpacity>
+          {/* Conditionally render the Generate Sentence button if not automated */}
+          {!isAutomated && (
+            <TouchableOpacity style={styles.smallBtn} onPress={handleGenerateSentence}>
+              <Text style={styles.smallBtnText}>Generate Sentence</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <TouchableOpacity style={styles.primaryCta} onPress={handleSendToOutput}>
-          <Text style={styles.primaryCtaText}>Send to Speech ➜</Text>
-        </TouchableOpacity>
+        {/* Send to Speech button */}
+        {isAutomated ? (
+          <TouchableOpacity style={styles.primaryCta} onPress={handleGenerateSentence}>
+            <Text style={styles.primaryCtaText}>Generate Sentence and Speak ➜</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.primaryCta} onPress={handleSendToOutput}>
+            <Text style={styles.primaryCtaText}>Send to Speech ➜</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
-
 // -------------------------
 // Styles (don't change)
 // -------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#050b18" },
+  container: {
+    flex: 1,
+    backgroundColor: "#050b18",
+  },
+  cameraWrap: {
+    flex: 1,
+    marginBottom: -20,  // Remove or reduce margin to decrease space between feed and transcript
+  },
+  panel: {
+    padding: 14,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    marginTop: -70,  // Reduce or remove top margin to decrease space between camera feed and transcript
+  },
   center: { flex: 1, backgroundColor: "#050b18", alignItems: "center", justifyContent: "center", padding: 20 },
   text: { color: "white", fontSize: 16, textAlign: "center" },
-  cameraWrap: { flex: 1 },
   camera: { flex: 1 },
   overlayTop: { position: "absolute", top: 48, left: 16, right: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   overlayTitle: { color: "white", fontSize: 16, fontWeight: "800" },
@@ -456,12 +504,41 @@ const styles = StyleSheet.create({
   pillGood: { backgroundColor: "rgba(34,197,94,0.18)", borderColor: "rgba(34,197,94,0.35)" },
   pillMid: { backgroundColor: "rgba(245,158,11,0.18)", borderColor: "rgba(245,158,11,0.35)" },
   pillBad: { backgroundColor: "rgba(239,68,68,0.18)", borderColor: "rgba(239,68,68,0.35)" },
+    pausedOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10, // Make sure it overlays the camera feed
+  },
+  pausedText: {
+    color: "red",
+    fontSize: 90,
+    fontWeight: "bold",
+    transform: [{ rotate: "-30deg" }], // Rotate the text diagonally
+    letterSpacing: 4,
+  },
+  homeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  homeButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+  },
   guideBox: { position: "absolute", left: 18, right: 18, top: "35%", height: 220, borderRadius: 22, borderWidth: 2, borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(0,0,0,0.10)", justifyContent: "flex-end", padding: 10 },
   guideText: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: "600" },
   thumb: { position: "absolute", top: 92, right: 16, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14, padding: 8, alignItems: "center" },
   thumbImg: { width: 64, height: 86, borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.18)" },
   thumbLabel: { marginTop: 6, color: "rgba(255,255,255,0.85)", fontSize: 11, fontWeight: "700" },
-  panel: { padding: 14, backgroundColor: "rgba(255,255,255,0.05)", borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   panelTitle: { color: "white", fontSize: 16, fontWeight: "800" },
   link: { color: "rgba(255,255,255,0.75)", fontWeight: "700" },
