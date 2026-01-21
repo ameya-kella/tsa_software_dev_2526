@@ -56,6 +56,17 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </Link>
       </View>
+      <View style={styles.cardGrid}>
+
+      <Link href="/speech" asChild>
+        <TouchableOpacity style={styles.card}>
+          <Text style={styles.cardTitle}>Offline Speech-to-Text</Text>
+          <Text style={styles.cardDesc}>Whisper Web</Text>
+          <Text style={styles.cardFoot}>Transcribe speech offline in real-time directly in the browser.</Text>
+        </TouchableOpacity>
+      </Link>
+    </View>
+
 
       <View style={styles.footer}>
         <View style={styles.footerContent}>
