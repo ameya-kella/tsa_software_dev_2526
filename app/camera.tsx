@@ -118,8 +118,8 @@ export default function CameraScreen() {
   const cameraRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const router = useRouter();
-const params = useLocalSearchParams<{ mode?: string }>();
-const isConversationMode = params?.mode === "conversation";
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isConversationMode = params?.mode === "conversation";
 
   const [isFrozen, setIsFrozen] = useState(false);
   const [lastPhotoUri, setLastPhotoUri] = useState<string | null>(null);
@@ -386,9 +386,18 @@ const handleSendToOutput = async () => {
 
   // 🧹 clear interpreter state
   handleClear();
+const handleSendToOutput = async () => {
+  const lastWord = detectedWords[detectedWords.length - 1] || liveText;
+  const finalText = (generatedSentence || lastWord || "—").trim();
 
-  // ✅ conversation mode: save + go to hearing turn
+  // 🔒 lock last word so it doesn’t reappear immediately
+  if (lastWord && lastWord !== "—") lockedWordRef.current = lastWord;
+
+  // 🧹 clear interpreter state
+  handleClear();
+
   if (isConversationMode) {
+    // 1️⃣ Save the deaf person's message
     await appendChatMessage({
       id: String(Date.now()),
       sender: "deaf",
@@ -396,16 +405,30 @@ const handleSendToOutput = async () => {
       ts: Date.now(),
     });
 
+    // 2️⃣ Save ASL interpreter’s message automatically (optional)
+    if (generatedSentence) {
+      await appendChatMessage({
+        id: String(Date.now() + 1), // unique ID
+        sender: "hearing",
+        text: generatedSentence,
+        ts: Date.now() + 1,
+      });
+    }
+
     router.push("/conversation");
     return;
   }
+  };
 
   // normal interpreter mode: go to output TTS screen
   router.push({
-    pathname: "/output",
-    params: { text: finalText },
-  });
-};
+      pathname: "/output",
+      params: { 
+        text: finalText,
+        autoGoConversation: isAutomated && isConversationMode ? "true" : "false",
+      },
+    });
+  };
 
 
   const handleClear = () => {
@@ -462,7 +485,7 @@ const handleSendToOutput = async () => {
       </View>
 
       <View style={styles.overlayTop}>
-        <Text style={styles.overlayTitle}>Live Interpreter</Text>
+        <Text style={styles.overlayTitle}>Live Feed</Text>
         
         {/* Home Icon Button */}
         <TouchableOpacity style={styles.homeButton} onPress={() => router.push('/')}>

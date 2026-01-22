@@ -2,28 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Link, useLocalSearchParams } from "expo-router";
 import * as Speech from "expo-speech";
+import { useRouter } from "expo-router";
 
 export default function OutputScreen() {
-  const params = useLocalSearchParams<{ text?: string }>();
+  const params = useLocalSearchParams<{ 
+  text?: string; 
+  autoGoConversation?: string; 
+  }>();
   const text = useMemo(() => (params?.text ? String(params.text) : "—"), [params]);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const router = useRouter();
+
+  const autoGoConversation = params?.autoGoConversation === "true";
+
 
   const speak = () => {
+    if (isSpeaking) return; // Prevent multiple TTS triggers
     Speech.stop();
     setIsSpeaking(true);
 
     Speech.speak(text, {
       rate: 0.95,
-      onDone: () => setIsSpeaking(false),
+      onDone: () => {
+        setIsSpeaking(false);
+        if (autoGoConversation) router.push("/conversation");
+      },
       onStopped: () => setIsSpeaking(false),
       onError: () => setIsSpeaking(false),
     });
   };
 
+
   const stop = () => {
     Speech.stop();
     setIsSpeaking(false);
   };
+
 
   useEffect(() => {
     // Auto speak when arriving (feels like an interpreter)

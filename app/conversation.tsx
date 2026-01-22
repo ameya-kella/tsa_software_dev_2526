@@ -13,18 +13,17 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Speech from "expo-speech";
-import { Audio } from "expo-av"; // using to record and then it sends to backend for python transcription
+import { Audio } from "expo-av";
 
 /**
  * Live Conversation (Hearing person speaks -> text)
- * Records audio using expo-av, then sends to backend for Whisper transcription.
+ * Records audio using expo-av (mobile) or MediaRecorder (web), then sends to backend for Whisper transcription.
  *
- * IMPORTANT:
- * - This file does NOT run whisper locally inside the app.
+ * NOTE:
  * - Whisper runs in your Python backend (FastAPI/Flask/etc).
  */
 
-const USE_MOCK_TRANSCRIBE = true; // set false once backend works
+const USE_MOCK_TRANSCRIBE = false;
 const TRANSCRIBE_URL = "http://192.168.1.175:8000/transcribe"; // python server
 
 type Msg = {
@@ -45,71 +44,121 @@ export default function ConversationScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
 
+  // Web refs
+  const webRecorderRef = useRef<MediaRecorder | null>(null);
+  const webChunksRef = useRef<Blob[]>([]);
+
   const canRecord = status === "idle";
   const canStop = status === "recording";
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
   }, [messages.length]);
-//get user permission 
+
+  // ---------------------------
+  // Mic permission helpers
+  // ---------------------------
   const ensureMicPermission = async () => {
-    const perm = await Audio.requestPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("Microphone needed", "Please enable microphone access to record speech.");
-      throw new Error("Mic permission not granted");
+    if (Platform.OS !== "web") {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Microphone needed", "Please enable microphone access to record speech.");
+        throw new Error("Mic permission not granted");
+      }
     }
   };
 
   const configureAudioSessionForRecording = async () => {
-    // this is for mobile apps to avoid error
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: false,
-    });
+    if (Platform.OS !== "web") {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: false,
+      });
+    }
   };
 
- const startRecording = async () => {
-  try {
-    if (!canRecord) return;
+  // ---------------------------
+  // Recording
+  // ---------------------------
+  const startRecording = async () => {
+    try {
+      if (!canRecord) return;
 
-    Speech.stop(); // stop any speaking audio
+      Speech.stop();
+      setTranscript("—");
+      setStatus("recording");
 
-    setTranscript("—");
-    setStatus("recording");
+      await ensureMicPermission();
 
-    await ensureMicPermission();
+      // -------- WEB --------
+      if (Platform.OS === "web") {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        webChunksRef.current = [];
+        webRecorderRef.current = recorder;
 
-    // mobile needs this or you get session activation failed
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    });
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) webChunksRef.current.push(e.data);
+        };
 
-    const rec = new Audio.Recording();
-    recordingRef.current = rec;
+        recorder.start();
+        return;
+      }
 
-    // uses expo av
-    await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      // -------- MOBILE --------
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
 
-    await rec.startAsync();
-  } catch (e: any) {
-    setStatus("idle");
-    Alert.alert("Recording error", String(e?.message || e));
-  }
-};
+      const rec = new Audio.Recording();
+      recordingRef.current = rec;
 
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+    } catch (e: any) {
+      setStatus("idle");
+      Alert.alert("Recording error", String(e?.message || e));
+    }
+  };
 
   const stopRecording = async () => {
     try {
       if (!canStop) return;
-
       setStatus("processing");
 
+      // -------- WEB --------
+      if (Platform.OS === "web") {
+        const recorder = webRecorderRef.current;
+        if (!recorder) {
+          setStatus("idle");
+          return;
+        }
+
+        recorder.stop();
+
+        recorder.onstop = async () => {
+          const blob = new Blob(webChunksRef.current, { type: "audio/webm" });
+          const text = await transcribeAudio(blob);
+          setTranscript(text || "—");
+
+          if (text?.trim()) {
+            setMessages((prev) => [
+              ...prev,
+              { id: String(Date.now()), from: "hearing", text: text.trim(), ts: Date.now() },
+            ]);
+          }
+          setStatus("idle");
+        };
+        return;
+      }
+
+      // -------- MOBILE --------
       const rec = recordingRef.current;
       if (!rec) {
         setStatus("idle");
@@ -125,11 +174,11 @@ export default function ConversationScreen() {
         Alert.alert("Recording error", "No audio file URI was created.");
         return;
       }
-// converting audio file into text
+
       const text = await transcribeAudio(uri);
       setTranscript(text || "—");
 
-      if (text && text.trim()) {
+      if (text?.trim()) {
         setMessages((prev) => [
           ...prev,
           { id: String(Date.now()), from: "hearing", text: text.trim(), ts: Date.now() },
@@ -143,18 +192,26 @@ export default function ConversationScreen() {
     }
   };
 
-  const transcribeAudio = async (uri: string) => {
+  // ---------------------------
+  // Upload to backend
+  // ---------------------------
+  const transcribeAudio = async (input: string | Blob) => {
     if (USE_MOCK_TRANSCRIBE) {
       await new Promise((r) => setTimeout(r, 600));
-      return "Mock transcript: hello baka this is mock";
+      return "Mock transcript";
     }
 
     const form = new FormData();
-    form.append("file", {
-      uri,
-      name: "speech.m4a",
-      type: Platform.OS === "ios" ? "audio/m4a" : "audio/mp4",
-    } as any);
+
+    if (Platform.OS === "web") {
+      form.append("file", input as Blob, "speech.webm");
+    } else {
+      form.append("file", {
+        uri: input as string,
+        name: "speech.m4a",
+        type: Platform.OS === "ios" ? "audio/m4a" : "audio/mp4",
+      } as any);
+    }
 
     const res = await fetch(TRANSCRIBE_URL, {
       method: "POST",
@@ -170,6 +227,9 @@ export default function ConversationScreen() {
     return String(data?.text || "");
   };
 
+  // ---------------------------
+  // Chat helpers
+  // ---------------------------
   const sendTypedReply = () => {
     const t = typedReply.trim();
     if (!t) return;
@@ -186,12 +246,15 @@ export default function ConversationScreen() {
     setMessages([]);
   };
 
+  // ---------------------------
+  // Render
+  // ---------------------------
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <View>
           <Text style={styles.title}>Live Conversation</Text>
-          <Text style={styles.subtitle}>Hearing person: speak → text</Text>
+          <Text style={styles.subtitle}>Hearing person: speech → text</Text>
         </View>
 
         <TouchableOpacity style={styles.homeBtn} onPress={() => router.push("/")}>
@@ -237,6 +300,13 @@ export default function ConversationScreen() {
         <Text style={styles.primaryText}>Clear</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={[styles.primary, { backgroundColor: "#3b82f6", marginTop: 8 }]}
+        onPress={() => router.push("/camera")} // <-- navigate to camera.tsx
+      >
+        <Text style={styles.primaryText}>Continue</Text>
+      </TouchableOpacity>
+
       <ScrollView ref={scrollRef} style={styles.chat} contentContainerStyle={styles.chatInner}>
         {messages.length === 0 ? (
           <Text style={styles.empty}>No messages yet.</Text>
@@ -273,7 +343,6 @@ export default function ConversationScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#050b18", padding: 16 },
-
   topBar: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -283,7 +352,6 @@ const styles = StyleSheet.create({
   },
   title: { color: "white", fontSize: 28, fontWeight: "900" },
   subtitle: { color: "rgba(255,255,255,0.6)", marginTop: 6, fontWeight: "700" },
-
   homeBtn: {
     width: 46,
     height: 46,
@@ -294,7 +362,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-
   card: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
@@ -302,16 +369,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14,
   },
-  cardLabel: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
+  cardLabel: { color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   cardValue: { color: "white", fontSize: 18, fontWeight: "900", marginTop: 6 },
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.10)", marginVertical: 12 },
   transcript: { color: "white", fontSize: 18, fontWeight: "800", marginTop: 6, lineHeight: 24 },
-
   controlsRow: { flexDirection: "row", gap: 12, marginTop: 14 },
   roundBtn: {
     flex: 1,
@@ -327,7 +388,6 @@ const styles = StyleSheet.create({
   },
   roundBtnText: { color: "white", fontWeight: "900" },
   btnDisabled: { opacity: 0.5 },
-
   primary: {
     marginTop: 12,
     paddingVertical: 12,
@@ -336,11 +396,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "white", fontWeight: "900" },
-
   chat: { flex: 1, marginTop: 12 },
   chatInner: { paddingBottom: 14 },
   empty: { color: "rgba(255,255,255,0.5)", fontWeight: "700", marginTop: 10, textAlign: "center" },
-
   bubble: {
     maxWidth: "82%",
     padding: 12,
@@ -354,14 +412,7 @@ const styles = StyleSheet.create({
   bubbleRight: { alignSelf: "flex-end", backgroundColor: "rgba(34,197,94,0.14)" },
   bubbleText: { color: "white", fontWeight: "800", lineHeight: 20 },
   bubbleMeta: { marginTop: 6, color: "rgba(255,255,255,0.55)", fontWeight: "800", fontSize: 11 },
-
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, paddingBottom: 6 },
   input: {
     flex: 1,
     backgroundColor: "rgba(255,255,255,0.06)",
