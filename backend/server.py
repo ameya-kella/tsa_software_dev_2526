@@ -6,6 +6,14 @@ import numpy as np
 from backend.inference.predictor import LiveASLPredictor
 from backend.inference.sentence import generate_sentence_from_words
 from backend.inference.config import TFLITE_MODEL_PATH, ORD2SIGN
+import whisper
+import uuid
+import subprocess
+from fastapi import UploadFile, File
+import os
+import tempfile
+
+whisper_model = whisper.load_model("base")
 
 # -------------------------
 # FastAPI setup
@@ -33,6 +41,10 @@ def append_word(sign, confidence):
         if not recognized_words or sign != recognized_words[-1]:
             recognized_words.append(sign)
 
+# -------------------------
+# WebSocket endpoint
+# -------------------------
+@app.websocket("/ws")
 # -------------------------
 # WebSocket endpoint
 # -------------------------
@@ -66,6 +78,27 @@ async def websocket_endpoint(ws: WebSocket):
                 recognized_words.clear()
 
             # -------------------------
+            # Convert numpy types to native Python types for JSON serialization
+            # -------------------------
+            # Ensure confidence and sign are converted to native Python types
+            if isinstance(confidence, np.generic):  # Check if it's a numpy type
+                confidence = float(confidence) if confidence is not None else None  # Convert to native Python float
+            
+            if isinstance(sign, np.generic):  # Check if sign is a numpy type
+                sign = str(sign)  # Convert to native Python string
+
+            # Convert top5 to fully JSON-serializable structure
+            if top5 is not None:
+                top5 = [
+                    {
+                        "sign": sign,
+                        "confidence": float(conf)
+                    }
+                    for sign, conf in top5
+                ]
+
+
+            # -------------------------
             # Send back current state
             # -------------------------
             await ws.send_json({
@@ -79,3 +112,32 @@ async def websocket_endpoint(ws: WebSocket):
         except Exception as e:
             print("WebSocket disconnected:", e)
             break
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    uid = str(uuid.uuid4())
+
+    # Use a temporary directory that works cross-platform
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = os.path.join(tmpdir, f"{uid}.webm")
+        wav_path = os.path.join(tmpdir, f"{uid}.wav")
+
+        # Save uploaded audio
+        with open(input_path, "wb") as f:
+            f.write(await file.read())
+
+        # Convert to WAV for Whisper
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-ar", "16000",
+            "-ac", "1",
+            wav_path
+        ], check=True)
+
+        # Transcribe
+        result = whisper_model.transcribe(wav_path, language="en")
+
+    return {
+        "text": result["text"]
+    }

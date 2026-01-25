@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 # -------------------------
 
 ORD2SIGN_PATH = BASE_DIR / "data" / "ord2sign.json"
-TFLITE_MODEL_PATH = str(BASE_DIR / "models" / "asl_to_text_model.tflite")
+TFLITE_MODEL_PATH = str(BASE_DIR / "models" / "asl_to_text_model_personal_no_alpha.tflite")
 
 # -------------------------
 # Constants (MATCH TRAINING)
