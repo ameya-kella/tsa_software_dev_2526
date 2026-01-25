@@ -1,77 +1,151 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Switch } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Switch,Platform } from "react-native";
 import { Link } from "expo-router";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 export default function HomeScreen() {
-  const [isAutomated, setIsAutomated] = useState(false); // State to control the toggle
+  const [isAutomated, setIsAutomated] = useState(false);
 
-  // Toggle handler
   const toggleSwitch = async () => {
     const newState = !isAutomated;
     setIsAutomated(newState);
-    
-    // Save the new state to AsyncStorage
-    await AsyncStorage.setItem('isAutomated', JSON.stringify(newState));
+    await AsyncStorage.setItem("isAutomated", JSON.stringify(newState));
   };
+
   useEffect(() => {
     const loadState = async () => {
       try {
-        const savedState = await AsyncStorage.getItem('isAutomated');
-        if (savedState !== null) {
-          setIsAutomated(JSON.parse(savedState)); // If saved, set it as the current state
-        }
+        const savedState = await AsyncStorage.getItem("isAutomated");
+        if (savedState !== null) setIsAutomated(JSON.parse(savedState));
       } catch (error) {
         console.error("Error loading state from AsyncStorage", error);
       }
     };
-
     loadState();
   }, []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>****title****</Text>
-        <Text style={styles.subtitle}>
-          Real-time accessibility for deaf and ASL speakers in everyday life.
-        </Text>
-      </View>
+    <View style={styles.root}>
+      {/* Dark-blue cohesive background (like your chat screen) */}
+     <LinearGradient
+  colors={["#020617", "#030a1e", "#020617"]}
 
-      <View style={styles.cardGrid}>
-        <Link href="/camera" asChild>
-          <TouchableOpacity style={styles.card}>
-            <Text style={styles.cardTitle}>Live Interpreter</Text>
-            <Text style={styles.cardDesc}>ASL → Text → Speech</Text>
-            <Text style={styles.cardFoot}>Removing barriers: live ASL translated into spoken sentences in real time.</Text>
-          </TouchableOpacity>
-        </Link>
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+  {/* purple corner glow (top-right) like inspo */}
+{/* deep blue shadow (bottom-left, darker + heavier) */}
+<LinearGradient
+  colors={[
+    "rgba(2,6,23,0.95)",      // near-black navy core
+    "rgba(2,6,23,0.75)",
+    "rgba(59,130,246,0.15)",  // soft blue lift
+    "rgba(59,130,246,0.00)",
+  ]}
+  start={{ x: 0.0, y: 1.0 }}
+  end={{ x: 0.6, y: 0.4 }}
+  style={StyleSheet.absoluteFillObject}
+/>
+
+{/* subtle cool blue accent (top-right, VERY light) */}
+<LinearGradient
+  colors={[
+    "rgba(59,130,246,0.22)",
+    "rgba(59,130,246,0.08)",
+    "rgba(59,130,246,0.00)",
+  ]}
+  start={{ x: 1.0, y: 0.0 }}
+  end={{ x: 0.55, y: 0.45 }}
+  style={StyleSheet.absoluteFillObject}
+/>
 
 
 
-      </View>
-      <View style={styles.cardGrid}>
+      {/* Main glass panel (matches your chat page “card” vibe) */}
+      <View style={styles.panel}>
+        <View style={styles.header}>
+          
 
-      <Link href="/speech" asChild>
-        <TouchableOpacity style={styles.card}>
-          <Text style={styles.cardTitle}>Offline Speech-to-Text</Text>
-          <Text style={styles.cardDesc}>Whisper Web</Text>
-          <Text style={styles.cardFoot}>Transcribe speech offline in real-time directly in the browser.</Text>
-        </TouchableOpacity>
-      </Link>
-    </View>
+          <Text style={styles.title}>ASL Program</Text>
+          <Text style={styles.subtitle}>
+            Real-time accessibility for deaf and ASL speakers in everyday life.
+          </Text>
+        </View>
 
+        <View style={styles.cardGrid}>
+          <Link href="/camera" asChild>
+            <TouchableOpacity activeOpacity={0.88} style={styles.card}>
+              <View style={styles.cardTop}>
+               <View style={styles.iconBubblePurple}>
+  <MaterialCommunityIcons name="hand-wave" size={22} color="#E9D5FF" />
+</View>
 
-      <View style={styles.footer}>
-        <View style={styles.footerContent}>
-          <Text style={styles.footerText}>Automate Send to Speech?</Text>
-          <Switch
-            value={isAutomated}
-            onValueChange={toggleSwitch}
-            trackColor={{ false: "#767577", true: "#81b0ff" }}
-            thumbColor={isAutomated ? "#f5dd4b" : "#f4f3f4"}
-          />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>Live Interpreter</Text>
+                  <Text style={styles.cardDesc}>ASL → Text → Speech</Text>
+                </View>
+              </View>
+
+  
+              <View style={styles.cardHintRow}>
+                <Text style={styles.cardHint}>live ASL translated into spoken sentences in real time.</Text>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </TouchableOpacity>
+          </Link>
+        </View>
+
+        <View style={styles.cardGrid}>
+          <Link href="/speech" asChild>
+            <TouchableOpacity activeOpacity={0.88} style={styles.card}>
+              <View style={styles.cardTop}>
+                <View style={styles.iconBubblePurple}>
+  <MaterialCommunityIcons name="microphone-message" size={22} color="#E9D5FF" />
+</View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>Offline Speech-to-Text</Text>
+                  <Text style={styles.cardDesc}>Whisper Web</Text>
+                </View>
+              </View>
+
+     
+              <View style={styles.cardHintRow}>
+                <Text style={styles.cardHint}> Transcribe speech offline in real-time directly.</Text>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </TouchableOpacity>
+          </Link>
+        </View>
+
+        <View style={styles.footer}>
+          <View style={styles.footerContent}>
+            <View>
+              <Text style={styles.footerText}>Automate Send to Speech?</Text>
+              <Text style={styles.footerSub}>
+                When enabled, confirmed text auto-speaks.
+              </Text>
+            </View>
+<View style={{ transform: [{ scale: 0.85 }], marginLeft: -6 }}>
+<View style={{ transform: [{ scale: 0.85 }], marginLeft: -6 }}>
+  <Switch
+    value={isAutomated}
+    onValueChange={toggleSwitch}
+    ios_backgroundColor="rgba(255, 255, 255, 1)"
+    trackColor={{
+      false: "rgba(255,255,255,0.15)", true: "rgba(59,130,246,0.45)"
+    }}
+    thumbColor="#FFFFFF"
+  />
+</View>
+
+</View>
+
+          </View>
         </View>
       </View>
     </View>
@@ -79,28 +153,233 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0b1220", padding: 18, justifyContent: "space-between" },
-  header: { paddingTop: 32 },
-  title: { color: "white", fontSize: 34, fontWeight: "800", letterSpacing: 0.2 },
-  subtitle: { color: "rgba(255,255,255,0.75)", marginTop: 8, fontSize: 14, lineHeight: 20, maxWidth: 320 },
-  cardGrid: { gap: 14, marginTop: 18 },
+  root: {
+    flex: 1,
+    backgroundColor: "#050b18",
+    padding: 14,
+    justifyContent: "center",
+  },
+
+  // Big “premium glass” panel like inspo screens
+panel: {
+  borderRadius: 34,
+  paddingVertical: 22,
+  paddingHorizontal: 18,
+
+  // ❌ remove outer box border
+  borderWidth: 0,
+
+  backgroundColor: "transparent",
+},
+
+
+
+  header: {
+  paddingHorizontal: 6,
+  paddingTop: 2,
+  paddingBottom: 6,
+},
+
+
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.28)",
+    backgroundColor: "rgba(124,58,237,0.10)",
+  },
+  badgeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    backgroundColor: "rgba(34,197,94,0.95)",
+  },
+  badgeText: {
+    color: "rgba(255,255,255,0.92)",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+
+  brandChip: {
+    width: 38,
+    height: 38,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.35)",
+    backgroundColor: "rgba(124,58,237,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandChipText: { fontSize: 16 },
+
+  title: {
+    color: "white",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+
+  subtitle: {
+    color: "rgba(255,255,255,0.62)",
+
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 320,
+    fontWeight: "700",
+  },
+
+  cardGrid: {
+    marginTop: 14,
+    gap: 14,
+    paddingHorizontal: 4,
+  },
+
+  // Glass tiles with purple edge highlight (matches inspo)
   card: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+  borderRadius: 26,
+  padding: 18,
+
+  // darker “glass” like your refs
+  backgroundColor: "rgba(255,255,255,0.05)",
+  borderWidth: 1,
+  borderColor: "rgba(124,58,237,0.20)",
+
+  // smoother tile depth
+  shadowColor: "#7C3AED",
+  shadowOpacity: 0.14,
+  shadowRadius: 22,
+  shadowOffset: { width: 0, height: 14 },
+},
+
+
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+iconBubblePurple: {
+  width: 48,
+  height: 48,
+  borderRadius: 18,
+  alignItems: "center",
+  justifyContent: "center",
+
+  backgroundColor: "rgba(124,58,237,0.22)",
+  borderWidth: 1,
+  borderColor: "rgba(124,58,237,0.40)",
+
+  // helps it look “embedded” and not flat
+  shadowColor: "#7C3AED",
+  shadowOpacity: 0.25,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+
+  // android
+  elevation: 6,
+},
+
+  iconChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 16,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cardDisabled: { opacity: 0.55 },
-  cardTitle: { color: "white", fontSize: 18, fontWeight: "800" },
-  cardDesc: { color: "rgba(255,255,255,0.8)", marginTop: 6, fontSize: 14, fontWeight: "600" },
-  cardFoot: { color: "rgba(255,255,255,0.55)", marginTop: 10, fontSize: 12 },
-  footer: { paddingBottom: 18, justifyContent: "center" },
+  iconChipPurple: {
+    borderColor: "rgba(124,58,237,0.35)",
+    backgroundColor: "rgba(124,58,237,0.14)",
+  },
+  iconChipText: { fontSize: 18 },
+
+  cardTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+
+  cardDesc: {
+    color: "rgba(255,255,255,0.82)",
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  cardFoot: {
+    color: "rgba(255,255,255,0.58)",
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+
+  cardHintRow: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardHint: {
+    color: "rgba(255,255,255,0.55)",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  cardArrow: {
+    color: "rgba(124,58,237,0.9)",
+    fontWeight: "900",
+    fontSize: 18,
+    marginTop: -2,
+  },
+
+  footer: {
+    marginTop: 18,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+  },
+
   footerContent: {
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    gap: 12,  // Adds space between the text and the switch
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
-  footerText: { color: "rgba(255,255,255,0.75)", fontSize: 14 },
+
+  footerText: {
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  footerSub: {
+    marginTop: 4,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 11,
+    fontWeight: "700",
+  },
 });
