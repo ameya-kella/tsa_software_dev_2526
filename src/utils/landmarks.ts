@@ -1,5 +1,5 @@
 import { LANDMARK_IDXS_LEFT_DOM, LANDMARK_IDXS_RIGHT_DOM, LEFT_HAND_IDXS, RIGHT_HAND_IDXS } from "./landmarkConstants";
-import { INPUT_SIZE } from "../config"; // add INPUT_SIZE in a config file
+import { INPUT_SIZE } from "../../src/config"; // add INPUT_SIZE in a config file
 
 /**
  * Preprocess a sequence of 543x3 landmarks for the ML model
