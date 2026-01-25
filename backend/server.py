@@ -45,6 +45,10 @@ def append_word(sign, confidence):
 # WebSocket endpoint
 # -------------------------
 @app.websocket("/ws")
+# -------------------------
+# WebSocket endpoint
+# -------------------------
+@app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     print("WebSocket connected")
@@ -72,6 +76,27 @@ async def websocket_endpoint(ws: WebSocket):
             if generate_sentence_flag and recognized_words:
                 sentence = generate_sentence_from_words(recognized_words)
                 recognized_words.clear()
+
+            # -------------------------
+            # Convert numpy types to native Python types for JSON serialization
+            # -------------------------
+            # Ensure confidence and sign are converted to native Python types
+            if isinstance(confidence, np.generic):  # Check if it's a numpy type
+                confidence = float(confidence) if confidence is not None else None  # Convert to native Python float
+            
+            if isinstance(sign, np.generic):  # Check if sign is a numpy type
+                sign = str(sign)  # Convert to native Python string
+
+            # Convert top5 to fully JSON-serializable structure
+            if top5 is not None:
+                top5 = [
+                    {
+                        "sign": sign,
+                        "confidence": float(conf)
+                    }
+                    for sign, conf in top5
+                ]
+
 
             # -------------------------
             # Send back current state

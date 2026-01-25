@@ -15,13 +15,20 @@ class LiveASLPredictor:
         pred_interval: seconds between predictions
         motion_threshold: minimal mean landmark change to consider frame "active"
         """
+        # Load the model and allocate tensors
         self.interpreter = tf.lite.Interpreter(model_path=tflite_path)
         self.interpreter.allocate_tensors()
-        self.pred_fn = self.interpreter.get_signature_runner("serving_default")
+
+        # Get input and output details for the TFLite model
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
+
+        # Ord to sign mapping
         self.ord2sign = ord2sign
         self.pred_interval = pred_interval
         self.motion_threshold = motion_threshold
 
+        # Initialize variables for real-time processing
         self.sequence = []
         self.last_pred_time = time.time()
         self.current_sign = "—"
@@ -34,10 +41,8 @@ class LiveASLPredictor:
 
         # Skip frame if minimal motion
         if self.last_landmarks is not None:
-            # Average landmark motion
             motion = np.nanmean(np.abs(frame_landmarks - self.last_landmarks))
             if motion < self.motion_threshold:
-                # Minimal movement -> skip prediction
                 return self.current_sign, None, None
         self.last_landmarks = frame_landmarks.copy()
 
@@ -56,24 +61,33 @@ class LiveASLPredictor:
         if frames is None:
             return self.current_sign, None, None
 
-        # Run model
-        sig_outputs = self.pred_fn(frames=frames, non_empty_frame_idxs=idxs)
-        preds = list(sig_outputs.values())[0]
+        # Prepare input tensor
+        input_data = frames.astype(np.float32)
+        frame_idxs = idxs.astype(np.float32)
+
+        # Set tensor values (use input details from model)
+        self.interpreter.set_tensor(self.input_details[1]['index'], input_data)  # Set frames
+        self.interpreter.set_tensor(self.input_details[0]['index'], frame_idxs)  # Set frame indices
+
+        # Run inference
+        self.interpreter.invoke()
+
+        # Get output tensor
+        output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
 
         # Convert logits to probabilities if needed
-        if preds.max() > 1.0 or preds.min() < 0.0:
-            probs = tf.nn.softmax(preds[0]).numpy()
-        else:
-            probs = preds[0]
+        probs = output_data[0]  # Take the first batch if applicable
+        if probs.max() > 1.0 or probs.min() < 0.0:
+            probs = tf.nn.softmax(probs).numpy()
 
         # Top prediction
         top_idx = probs.argmax()
         self.current_sign = self.ord2sign.get(top_idx, "—")
-        top_confidence = float(probs[top_idx])
+        top_confidence = probs[top_idx]
 
         # Top 5 predictions
         top5_idx = probs.argsort()[-5:][::-1]
-        top5 = [(self.ord2sign.get(i, "—"), float(probs[i])) for i in top5_idx]
+        top5 = [(self.ord2sign.get(i, "—"), probs[i]) for i in top5_idx]
 
         # Print to terminal
         print(f"\nPredicted Sign: {self.current_sign} | Confidence: {top_confidence:.2f}")
