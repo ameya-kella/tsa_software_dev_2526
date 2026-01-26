@@ -1,4 +1,3 @@
-# backend/server.py
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
@@ -6,101 +5,79 @@ import numpy as np
 from backend.inference.predictor import LiveASLPredictor
 from backend.inference.sentence import generate_sentence_from_words
 from backend.inference.config import TFLITE_MODEL_PATH, ORD2SIGN
+from backend.inference.text_to_gloss import english_to_asl_keywords
 import whisper
 import uuid
 import subprocess
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, WebSocketDisconnect
+
 import os
 import tempfile
-
+import logging
 whisper_model = whisper.load_model("base")
 
-# -------------------------
-# FastAPI setup
-# -------------------------
+# setup FastAPI
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # adjust for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -------------------------
-# Predictor instance
-# -------------------------
+# predictor class - create instance
 predictor = LiveASLPredictor(TFLITE_MODEL_PATH, ORD2SIGN)
 recognized_words = []
 
-# -------------------------
-# Helper to append new sign if valid
-# -------------------------
+# append word if valid
 def append_word(sign, confidence):
     if confidence is not None and sign not in ("—", "TV"):
         if not recognized_words or sign != recognized_words[-1]:
             recognized_words.append(sign)
 
-# -------------------------
 # WebSocket endpoint
-# -------------------------
-@app.websocket("/ws")
-# -------------------------
-# WebSocket endpoint
-# -------------------------
+import asyncio
+
+async def keep_alive(ws: WebSocket):
+    while True:
+        await ws.send_json({"ping": True})
+        await asyncio.sleep(30)
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     print("WebSocket connected")
-    
+
     while True:
         try:
             data = await ws.receive_json()
-            
-            # Get landmarks sent from frontend (543 x 3)
+
             landmarks = np.array(data.get("landmarks", []), dtype=np.float32)
             if landmarks.size == 0:
-                continue  # skip empty frames
-            
-            # -------------------------
-            # Update predictor and live words
-            # -------------------------
+                continue
+
+            generate_sentence = data.get("generate_sentence", False)
+            if generate_sentence:
+                print("Generating sentence...")
+
             sign, confidence, top5 = predictor.update(landmarks)
             append_word(sign, confidence)
 
-            # -------------------------
-            # Check if client wants to generate sentence
-            # -------------------------
-            generate_sentence_flag = data.get("generate_sentence", False)
             sentence = ""
-            if generate_sentence_flag and recognized_words:
+            if generate_sentence:
+                print("Generating sentence from words:", recognized_words)
                 sentence = generate_sentence_from_words(recognized_words)
+                print(f"Generated sentence: {sentence}")
+
+                # clear the recognized words list after generating the sentence
                 recognized_words.clear()
 
-            # -------------------------
-            # Convert numpy types to native Python types for JSON serialization
-            # -------------------------
-            # Ensure confidence and sign are converted to native Python types
-            if isinstance(confidence, np.generic):  # Check if it's a numpy type
-                confidence = float(confidence) if confidence is not None else None  # Convert to native Python float
-            
-            if isinstance(sign, np.generic):  # Check if sign is a numpy type
-                sign = str(sign)  # Convert to native Python string
-
-            # Convert top5 to fully JSON-serializable structure
+            confidence = float(confidence) if confidence is not None else None
+            sign = str(sign)
             if top5 is not None:
-                top5 = [
-                    {
-                        "sign": sign,
-                        "confidence": float(conf)
-                    }
-                    for sign, conf in top5
-                ]
+                top5 = [{"sign": s, "confidence": float(c)} for s, c in top5]
 
-
-            # -------------------------
-            # Send back current state
-            # -------------------------
             await ws.send_json({
                 "current_sign": sign,
                 "confidence": confidence,
@@ -109,24 +86,28 @@ async def websocket_endpoint(ws: WebSocket):
                 "generated_sentence": sentence
             })
 
-        except Exception as e:
-            print("WebSocket disconnected:", e)
+        except WebSocketDisconnect:
+            print("WebSocket disconnected")
             break
+
+        except Exception as e:
+            print(f"Error: {e}")
+            continue
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     uid = str(uuid.uuid4())
 
-    # Use a temporary directory that works cross-platform
+    # use temporary directory that works cross-platform
     with tempfile.TemporaryDirectory() as tmpdir:
         input_path = os.path.join(tmpdir, f"{uid}.webm")
         wav_path = os.path.join(tmpdir, f"{uid}.wav")
 
-        # Save uploaded audio
+        # save uploaded audio
         with open(input_path, "wb") as f:
             f.write(await file.read())
 
-        # Convert to WAV for Whisper
+        # convert to WAV for Whisper
         subprocess.run([
             "ffmpeg", "-y",
             "-i", input_path,
@@ -135,9 +116,17 @@ async def transcribe_audio(file: UploadFile = File(...)):
             wav_path
         ], check=True)
 
-        # Transcribe
+        # transcribe
         result = whisper_model.transcribe(wav_path, language="en")
 
     return {
         "text": result["text"]
     }
+
+@app.post("/convert_to_asl_style")
+async def convert_to_asl_style(text: str):
+    try:
+        asl_style = english_to_asl_keywords(text)
+        return {"asl_style": asl_style}
+    except Exception as e:
+        return {"error": str(e)}

@@ -28,22 +28,20 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Dark-blue cohesive background (like your chat screen) */}
+      {/* Setting background style */}
      <LinearGradient
-  colors={["#020617", "#030a1e", "#020617"]}
+    colors={["#020617", "#030a1e", "#020617"]}
 
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-  {/* purple corner glow (top-right) like inspo */}
-{/* deep blue shadow (bottom-left, darker + heavier) */}
 <LinearGradient
   colors={[
-    "rgba(2,6,23,0.95)",      // near-black navy core
+    "rgba(2,6,23,0.95)",
     "rgba(2,6,23,0.75)",
-    "rgba(59,130,246,0.15)",  // soft blue lift
+    "rgba(59,130,246,0.15)",
     "rgba(59,130,246,0.00)",
   ]}
   start={{ x: 0.0, y: 1.0 }}
@@ -51,7 +49,6 @@ export default function HomeScreen() {
   style={StyleSheet.absoluteFillObject}
 />
 
-{/* subtle cool blue accent (top-right, VERY light) */}
 <LinearGradient
   colors={[
     "rgba(59,130,246,0.22)",
@@ -62,15 +59,11 @@ export default function HomeScreen() {
   end={{ x: 0.55, y: 0.45 }}
   style={StyleSheet.absoluteFillObject}
 />
-
-
-
-      {/* Main glass panel (matches your chat page “card” vibe) */}
       <View style={styles.panel}>
         <View style={styles.header}>
           
 
-          <Text style={styles.title}>ASL Program</Text>
+          <Text style={styles.title}>Signify</Text>
           <Text style={styles.subtitle}>
             Real-time accessibility for deaf and ASL speakers in everyday life.
           </Text>
@@ -81,8 +74,8 @@ export default function HomeScreen() {
             <TouchableOpacity activeOpacity={0.88} style={styles.card}>
               <View style={styles.cardTop}>
                <View style={styles.iconBubblePurple}>
-  <MaterialCommunityIcons name="hand-wave" size={22} color="#E9D5FF" />
-</View>
+          <MaterialCommunityIcons name="hand-wave" size={22} color="#E9D5FF" />
+        </View>
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Live Interpreter</Text>
@@ -92,7 +85,7 @@ export default function HomeScreen() {
 
   
               <View style={styles.cardHintRow}>
-                <Text style={styles.cardHint}>live ASL translated into spoken sentences in real time.</Text>
+                <Text style={styles.cardHint}>Live ASL translated into spoken sentences in real time.</Text>
                 <Text style={styles.cardArrow}>›</Text>
               </View>
             </TouchableOpacity>
@@ -100,22 +93,20 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.cardGrid}>
-          <Link href="/speech" asChild>
+          <Link href="/camera?mode=conversation" asChild>
             <TouchableOpacity activeOpacity={0.88} style={styles.card}>
               <View style={styles.cardTop}>
                 <View style={styles.iconBubblePurple}>
-  <MaterialCommunityIcons name="microphone-message" size={22} color="#E9D5FF" />
-</View>
-
+                  <MaterialCommunityIcons name="microphone-message" size={22} color="#E9D5FF" />
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>Offline Speech-to-Text</Text>
-                  <Text style={styles.cardDesc}>Whisper Web</Text>
+                  <Text style={styles.cardTitle}>Live Conversation</Text>
+                  <Text style={styles.cardDesc}>Interpreter + Speech-to-Text</Text>
                 </View>
               </View>
 
-     
               <View style={styles.cardHintRow}>
-                <Text style={styles.cardHint}> Transcribe speech offline in real-time directly.</Text>
+                <Text style={styles.cardHint}>For seamless communication between deaf and non-ASL speakers.</Text>
                 <Text style={styles.cardArrow}>›</Text>
               </View>
             </TouchableOpacity>
@@ -161,26 +152,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Big “premium glass” panel like inspo screens
 panel: {
   borderRadius: 34,
   paddingVertical: 22,
   paddingHorizontal: 18,
-
-  // ❌ remove outer box border
   borderWidth: 0,
-
   backgroundColor: "transparent",
 },
-
-
 
   header: {
   paddingHorizontal: 6,
   paddingTop: 2,
   paddingBottom: 6,
 },
-
 
   badgeRow: {
     flexDirection: "row",
@@ -248,17 +232,14 @@ panel: {
     paddingHorizontal: 4,
   },
 
-  // Glass tiles with purple edge highlight (matches inspo)
   card: {
   borderRadius: 26,
   padding: 18,
 
-  // darker “glass” like your refs
   backgroundColor: "rgba(255,255,255,0.05)",
   borderWidth: 1,
   borderColor: "rgba(124,58,237,0.20)",
 
-  // smoother tile depth
   shadowColor: "#7C3AED",
   shadowOpacity: 0.14,
   shadowRadius: 22,
@@ -288,7 +269,7 @@ iconBubblePurple: {
   shadowRadius: 10,
   shadowOffset: { width: 0, height: 6 },
 
-  // android
+  // for android
   elevation: 6,
 },
 

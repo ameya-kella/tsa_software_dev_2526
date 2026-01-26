@@ -24,7 +24,7 @@ export class ASLWebSocket {
     this.ws.onerror = (e) => console.log("WS error", e);
   }
 
-  // ---- UPDATED: send landmarks and optionally trigger sentence generation ----
+  // send landmarks and optionally trigger sentence generation ----
   sendLandmarks(landmarks: number[][], generateSentence = false) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(

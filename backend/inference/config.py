@@ -1,26 +1,17 @@
 import json
 from pathlib import Path
 
-# Resolve paths relative to this file
+# resolve paths relative to this file
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-# -------------------------
-# Paths
-# -------------------------
-
+# file path mapping
 ORD2SIGN_PATH = BASE_DIR / "data" / "ord2sign.json"
-TFLITE_MODEL_PATH = str(BASE_DIR / "models" / "asl_to_text_model_personal_no_alpha.tflite")
+TFLITE_MODEL_PATH = str(BASE_DIR / "models" / "asl_model_fp32.tflite")
 
-# -------------------------
-# Constants (MATCH TRAINING)
-# -------------------------
-
+# constants for ASL --> text model (match the training)
 ROWS_PER_FRAME = 543
 INPUT_SIZE = 64
 
-# -------------------------
-# Load ord2sign mapping
-# -------------------------
-
+# loading ord2sign mapping
 with open(ORD2SIGN_PATH, "r") as f:
     ORD2SIGN = {int(k): v for k, v in json.load(f).items()}

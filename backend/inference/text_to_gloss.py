@@ -3,18 +3,19 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk import pos_tag, word_tokenize
 
-# Download necessary NLTK data
+# this file is for converting english text --> asl-styled text
+# ex: "I like to go to parks." --> "ME LIKE GO PARK"
+
 nltk.download('punkt')
-nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger_eng')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 nltk.download('stopwords')
 
-# Initialize
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
 
-# Pronoun / auxiliary mappings for simple ASL style
+# mappings for aiding conversion
 PRONOUN_MAP = {
     "i": "ME",
     "me": "ME",
@@ -57,7 +58,7 @@ AUX_MAP = {
     "must": "",
 }
 
-# Function to map NLTK POS tags to WordNet POS
+# function to map NLTK POS tags to WordNet POS
 def get_wordnet_pos(treebank_tag):
     if treebank_tag.startswith('J'):
         return wordnet.ADJ
@@ -76,48 +77,34 @@ def english_to_asl_keywords(sentence):
     words = word_tokenize(sentence.lower())
 
     keywords = []
-    # POS tag
     tagged = pos_tag(words)
 
     for word, tag in tagged:
-        # Skip punctuation
+        # skip punctuation
         if word in string.punctuation:
             continue
 
-        # Remove filler words
+        # remove filler words
         if word in stop_words and word not in PRONOUN_MAP:
             continue
 
-        # Map pronouns first
+        # map pronouns first
         if word in PRONOUN_MAP:
             keywords.append(PRONOUN_MAP[word])
             continue
 
-        # Remove auxiliaries
+        # remove auxiliaries
         if word in AUX_MAP:
             continue
 
-        # Lemmatize
+        # lemmatize
         wn_tag = get_wordnet_pos(tag)
         if wn_tag is not None:
             lemma = lemmatizer.lemmatize(word, pos=wn_tag)
         else:
             lemma = word
 
-        # Uppercase for ASL style
+        # uppercase for ASL style
         keywords.append(lemma.upper())
 
     return ", ".join(keywords)
-
-# Example usage
-examples = [
-    "I like to eat at restaurants.",
-    "My friends went to the park yesterday.",
-    "She is reading a book in the library.",
-    "We have finished our homework already.",
-]
-
-for ex in examples:
-    print(f"English: {ex}")
-    print(f"Predicted: {english_to_asl_keywords(ex)}")
-    print("-"*60)

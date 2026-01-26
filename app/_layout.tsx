@@ -18,8 +18,8 @@ export default function Layout() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: "#0b1220" },
   phoneFrame: {
-    width: 390,
-    height: 604,
+    width: 440,
+    height: 952,
     marginLeft: "auto",
     marginRight: "auto",
     borderWidth: 1,
