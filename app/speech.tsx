@@ -11,15 +11,22 @@ import {
   SafeAreaView,
   Animated,
   Switch,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { wsManager } from './WebSocketManager';
+import { Audio } from "expo-av";
+import { wsManager } from "./WebSocketManager";
 
-// message type
+
+const USE_MOCK_TRANSCRIBE = true;
+
+const TRANSCRIBE_URL = "http://192.168.1.175:8000/transcribe";
+
+
 type ChatMsg = {
   id: string;
   sender: "deaf" | "hearing";
@@ -30,39 +37,44 @@ type ChatMsg = {
 export default function SpeechScreen() {
   const router = useRouter();
   const isWeb = Platform.OS === "web";
+
   const [showAslUnderHearing, setShowAslUnderHearing] = useState(false);
-  const [aslStyleText, setAslStyleText] = useState("");
-  
+
   const sendToAslStyleEnglish = (text: string) => {
-    const data = { text };  // structure the data for WebSocket message
+    const data = { text };
     wsManager.send(data);
   };
 
-  const toAslStyleEnglish = async (text) => {
+  const toAslStyleEnglish = async (text: string) => {
     try {
-      const aslStyle = await sendToAslStyleEnglish(text);
-      return aslStyle;
+      sendToAslStyleEnglish(text);
+      return text;
     } catch (error) {
-      console.error('Error fetching ASL style:', error);
-      return text; 
+      console.error("Error fetching ASL style:", error);
+      return text;
     }
   };
 
-  const recordStartedAt = useRef<number>(0); // when recording started
+  const recordStartedAt = useRef<number>(0);
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [typedText, setTypedText] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [status, setStatus] = useState<string>("Ready to record");
-  const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
 
   const listRef = useRef<FlatList<ChatMsg>>(null);
   const inputRef = useRef<TextInput>(null);
-  const didInit = useRef(false);
 
-  // mic pulse animation
+
   const pulse = useRef(new Animated.Value(0)).current;
+
+
+  const recordingRef = useRef<Audio.Recording | null>(null);
+
+  const webRecorderRef = useRef<MediaRecorder | null>(null);
+  const webChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     if (!listening) {
@@ -102,18 +114,177 @@ export default function SpeechScreen() {
   const sendTyped = () => {
     if (!typedText.trim()) return;
     addMessage("hearing", typedText);
+    sendToAslStyleEnglish(typedText); // send for translation
     setTypedText("");
-    sendToAslStyleEnglish(typedText);  // send the text for translation from regular english --> ASL style english
   };
 
-  const startListening = async () => {
-    setListening(true);
-    setStatus("Recording...");
+
+  const ensureMicPermission = async () => {
+    if (Platform.OS !== "web") {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Microphone needed", "Please enable microphone access to record speech.");
+        throw new Error("Mic permission not granted");
+      }
+    }
   };
 
-  const stopListening = async () => {
-    setListening(false);
-    setStatus("Processing audio...");
+  const transcribeAudio = async (input: string | Blob) => {
+    if (USE_MOCK_TRANSCRIBE) {
+      await new Promise((r) => setTimeout(r, 500));
+      return "Mock transcript (no backend)";
+    }
+
+    const form = new FormData();
+
+    if (Platform.OS === "web") {
+      form.append("file", input as Blob, "speech.webm");
+    } else {
+      form.append(
+        "file",
+        {
+          uri: input as string,
+          name: "speech.m4a",
+          type: Platform.OS === "ios" ? "audio/m4a" : "audio/mp4",
+        } as any
+      );
+    }
+
+    const res = await fetch(TRANSCRIBE_URL, { method: "POST", body: form });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Transcribe failed (${res.status}): ${txt || "No details"}`);
+    }
+
+    const data = await res.json();
+    return String(data?.text || "");
+  };
+
+
+  const startRecording = async () => {
+    try {
+      if (loading) return;
+
+      setLoading(false);
+      setStatus("Recording...");
+      setListening(true);
+      recordStartedAt.current = Date.now();
+
+      await ensureMicPermission();
+
+
+      if (Platform.OS === "web") {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        webChunksRef.current = [];
+        webRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) webChunksRef.current.push(e.data);
+        };
+
+        recorder.start();
+        return;
+      }
+
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      const rec = new Audio.Recording();
+      recordingRef.current = rec;
+
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+    } catch (e: any) {
+      setListening(false);
+      setStatus("Ready to record");
+      Alert.alert("Recording error", String(e?.message || e));
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      if (loading) return;
+
+      setStatus("Processing audio...");
+      setLoading(true);
+      setListening(false);
+
+
+      if (Platform.OS === "web") {
+        const recorder = webRecorderRef.current;
+        if (!recorder) {
+          setLoading(false);
+          setStatus("Ready to record");
+          return;
+        }
+
+        recorder.stop();
+
+        recorder.onstop = async () => {
+          try {
+            const blob = new Blob(webChunksRef.current, { type: "audio/webm" });
+            const text = await transcribeAudio(blob);
+            const clean = (text || "").trim();
+
+            if (clean) {
+              addMessage("hearing", clean);
+              sendToAslStyleEnglish(clean);
+            }
+
+            setLoading(false);
+            setStatus("Ready to record");
+          } catch (err: any) {
+            setLoading(false);
+            setStatus("Ready to record");
+            Alert.alert("Transcription error", String(err?.message || err));
+          }
+        };
+
+        return;
+      }
+
+
+      const rec = recordingRef.current;
+      if (!rec) {
+        setLoading(false);
+        setStatus("Ready to record");
+        return;
+      }
+
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+      recordingRef.current = null;
+
+      if (!uri) {
+        setLoading(false);
+        setStatus("Ready to record");
+        Alert.alert("Recording error", "No audio file URI was created.");
+        return;
+      }
+
+      const text = await transcribeAudio(uri);
+      const clean = (text || "").trim();
+
+      if (clean) {
+        addMessage("hearing", clean);
+        sendToAslStyleEnglish(clean);
+      }
+
+      setLoading(false);
+      setStatus("Ready to record");
+    } catch (e: any) {
+      setLoading(false);
+      setStatus("Ready to record");
+      Alert.alert("Recording error", String(e?.message || e));
+    }
   };
 
   const prettyStatus = useMemo(() => {
@@ -137,9 +308,7 @@ export default function SpeechScreen() {
           <Ionicons name="chatbubble-ellipses-outline" size={30} color="rgba(255,255,255,0.75)" />
         </View>
         <Text style={styles.emptyTitle}>Start a conversation</Text>
-        <Text style={styles.emptySub}>
-          Tap the mic to record, or type a message below.
-        </Text>
+        <Text style={styles.emptySub}>Tap the mic to record, or type a message below.</Text>
       </View>
     );
   }, []);
@@ -166,7 +335,7 @@ export default function SpeechScreen() {
                 <Ionicons name="swap-horizontal" size={14} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.aslHeaderText}>ASL-style English</Text>
               </View>
-              <Text style={styles.aslText}>{toAslStyleEnglish(item.text)}</Text>
+              <Text style={styles.aslText}>{toAslStyleEnglish(item.text) as any}</Text>
             </View>
           )}
         </View>
@@ -221,6 +390,7 @@ export default function SpeechScreen() {
                 <Text style={styles.pillText}>{prettyStatus.label}</Text>
               </View>
             </View>
+
             <View style={styles.headerRight}>
               <View style={styles.toggleWrap}>
                 <Text style={styles.toggleLabel}>ASL</Text>
@@ -231,6 +401,7 @@ export default function SpeechScreen() {
                   thumbColor="white"
                 />
               </View>
+
               <TouchableOpacity onPress={() => router.push("/")} style={styles.iconBtn}>
                 <Ionicons name="home" size={18} color="white" />
               </TouchableOpacity>
@@ -258,11 +429,18 @@ export default function SpeechScreen() {
             <TouchableOpacity
               style={[styles.micBtn, loading && { opacity: 0.55 }]}
               disabled={loading}
-              onPress={startListening}
+              onPress={listening ? stopRecording : startRecording} // ✅ REAL functionality now
               activeOpacity={0.85}
             >
               <Ionicons name="mic" size={18} color="white" />
-              {listening && <Animated.View style={[styles.micRing, { opacity: ringOpacity, transform: [{ scale: ringScale }] }]} />}
+              {listening && (
+                <Animated.View
+                  style={[
+                    styles.micRing,
+                    { opacity: ringOpacity, transform: [{ scale: ringScale }] },
+                  ]}
+                />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -502,7 +680,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   input: { color: "white", fontSize: 15, fontWeight: "800", paddingVertical: 0 },
-  
+
   miniHint: {
     marginTop: 6,
     color: "rgba(255,255,255,0.45)",

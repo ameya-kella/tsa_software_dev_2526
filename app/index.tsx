@@ -93,7 +93,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.cardGrid}>
-          <Link href="/camera?mode=conversation" asChild>
+          <Link href="/speech" asChild>
             <TouchableOpacity activeOpacity={0.88} style={styles.card}>
               <View style={styles.cardTop}>
                 <View style={styles.iconBubblePurple}>
