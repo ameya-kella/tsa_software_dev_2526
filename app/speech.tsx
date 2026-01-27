@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,13 +19,16 @@ import { useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { Audio } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
+
 import { wsManager } from "./WebSocketManager";
 
-
 const USE_MOCK_TRANSCRIBE = true;
-
 const TRANSCRIBE_URL = "http://192.168.1.175:8000/transcribe";
 
+const CHAT_KEY = "conversation_messages_v1";
+const PENDING_DEAF_KEY = "pending_deaf_message_v1";
 
 type ChatMsg = {
   id: string;
@@ -40,23 +43,6 @@ export default function SpeechScreen() {
 
   const [showAslUnderHearing, setShowAslUnderHearing] = useState(false);
 
-  const sendToAslStyleEnglish = (text: string) => {
-    const data = { text };
-    wsManager.send(data);
-  };
-
-  const toAslStyleEnglish = async (text: string) => {
-    try {
-      sendToAslStyleEnglish(text);
-      return text;
-    } catch (error) {
-      console.error("Error fetching ASL style:", error);
-      return text;
-    }
-  };
-
-  const recordStartedAt = useRef<number>(0);
-
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [typedText, setTypedText] = useState("");
 
@@ -67,15 +53,124 @@ export default function SpeechScreen() {
   const listRef = useRef<FlatList<ChatMsg>>(null);
   const inputRef = useRef<TextInput>(null);
 
-
   const pulse = useRef(new Animated.Value(0)).current;
-
 
   const recordingRef = useRef<Audio.Recording | null>(null);
 
   const webRecorderRef = useRef<MediaRecorder | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
 
+  // --------------------
+  // ASL-style helper (keep simple for now)
+  // --------------------
+  const sendToAslStyleEnglish = (text: string) => {
+    try {
+      wsManager.send({ text });
+    } catch (e) {
+      console.log("wsManager send failed", e);
+    }
+  };
+
+  // NOTE: you cannot render an async function directly in JSX.
+  // This returns the original text for display.
+  const toAslStyleEnglish = (text: string) => {
+    sendToAslStyleEnglish(text);
+    return text;
+  };
+
+  // --------------------
+  // Persistence
+  // --------------------
+  const loadChat = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(CHAT_KEY);
+      const prev = raw ? JSON.parse(raw) : [];
+      setMessages(Array.isArray(prev) ? prev : []);
+    } catch (e) {
+      console.log("loadChat error", e);
+      setMessages([]);
+    }
+  };
+
+  const persistChat = async (next: ChatMsg[]) => {
+    try {
+      await AsyncStorage.setItem(CHAT_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.log("persistChat error", e);
+    }
+  };
+
+  const addMessage = (sender: ChatMsg["sender"], text: string, ts?: number) => {
+    const clean = (text || "").trim();
+    if (!clean) return;
+
+    const msg: ChatMsg = {
+      id: String(ts ?? Date.now()) + "_" + Math.random().toString(16).slice(2),
+      sender,
+      text: clean,
+      ts: ts ?? Date.now(),
+    };
+
+    setMessages((prev) => {
+      const next = [...prev, msg];
+      persistChat(next);
+      return next;
+    });
+  };
+
+  const consumePendingDeaf = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_DEAF_KEY);
+      if (!raw) return;
+
+      const payload = JSON.parse(raw);
+      const text = String(payload?.text || "").trim();
+      const ts = Number(payload?.ts || Date.now());
+
+      // clear mailbox so it won't re-add
+      await AsyncStorage.removeItem(PENDING_DEAF_KEY);
+
+      if (!text) return;
+
+      // prevent accidental duplicates
+      setMessages((prev) => {
+        const exists = prev.some(
+          (m) => m.sender === "deaf" && m.text === text && m.ts === ts
+        );
+        const msg: ChatMsg = {
+          id: String(ts) + "_" + Math.random().toString(16).slice(2),
+          sender: "deaf",
+          text,
+          ts,
+        };
+        const next = exists ? prev : [...prev, msg];
+        persistChat(next);
+        return next;
+      });
+    } catch (e) {
+      console.log("consumePendingDeaf error", e);
+    }
+  };
+
+  // On focus: load saved messages + pull in the latest deaf text
+  useFocusEffect(
+    useCallback(() => {
+      loadChat();
+      consumePendingDeaf();
+    }, [])
+  );
+
+  // --------------------
+  // Scroll-to-bottom
+  // --------------------
+  useEffect(() => {
+    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+    return () => clearTimeout(t);
+  }, [messages.length]);
+
+  // --------------------
+  // Mic ring pulse
+  // --------------------
   useEffect(() => {
     if (!listening) {
       pulse.stopAnimation();
@@ -92,33 +187,19 @@ export default function SpeechScreen() {
     return () => loop.stop();
   }, [listening, pulse]);
 
-  const addMessage = (sender: ChatMsg["sender"], text: string) => {
-    const clean = (text || "").trim();
-    if (!clean) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()) + "_" + Math.random().toString(16).slice(2),
-        sender,
-        text: clean,
-        ts: Date.now(),
-      },
-    ]);
-  };
-
-  useEffect(() => {
-    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-    return () => clearTimeout(t);
-  }, [messages.length]);
-
+  // --------------------
+  // Hearing typed message
+  // --------------------
   const sendTyped = () => {
     if (!typedText.trim()) return;
     addMessage("hearing", typedText);
-    sendToAslStyleEnglish(typedText); // send for translation
+    sendToAslStyleEnglish(typedText);
     setTypedText("");
   };
 
-
+  // --------------------
+  // Recording / transcription
+  // --------------------
   const ensureMicPermission = async () => {
     if (Platform.OS !== "web") {
       const perm = await Audio.requestPermissionsAsync();
@@ -161,7 +242,6 @@ export default function SpeechScreen() {
     return String(data?.text || "");
   };
 
-
   const startRecording = async () => {
     try {
       if (loading) return;
@@ -169,10 +249,8 @@ export default function SpeechScreen() {
       setLoading(false);
       setStatus("Recording...");
       setListening(true);
-      recordStartedAt.current = Date.now();
 
       await ensureMicPermission();
-
 
       if (Platform.OS === "web") {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -188,7 +266,6 @@ export default function SpeechScreen() {
         recorder.start();
         return;
       }
-
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -216,7 +293,6 @@ export default function SpeechScreen() {
       setStatus("Processing audio...");
       setLoading(true);
       setListening(false);
-
 
       if (Platform.OS === "web") {
         const recorder = webRecorderRef.current;
@@ -250,7 +326,6 @@ export default function SpeechScreen() {
 
         return;
       }
-
 
       const rec = recordingRef.current;
       if (!rec) {
@@ -287,6 +362,9 @@ export default function SpeechScreen() {
     }
   };
 
+  // --------------------
+  // Status pill
+  // --------------------
   const prettyStatus = useMemo(() => {
     if (loading) return { label: "Loading model…", tone: "warn" as const };
     if (!isWeb) return { label: "Web only", tone: "bad" as const };
@@ -335,7 +413,7 @@ export default function SpeechScreen() {
                 <Ionicons name="swap-horizontal" size={14} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.aslHeaderText}>ASL-style English</Text>
               </View>
-              <Text style={styles.aslText}>{toAslStyleEnglish(item.text) as any}</Text>
+              <Text style={styles.aslText}>{toAslStyleEnglish(item.text)}</Text>
             </View>
           )}
         </View>
@@ -429,7 +507,7 @@ export default function SpeechScreen() {
             <TouchableOpacity
               style={[styles.micBtn, loading && { opacity: 0.55 }]}
               disabled={loading}
-              onPress={listening ? stopRecording : startRecording} // ✅ REAL functionality now
+              onPress={listening ? stopRecording : startRecording}
               activeOpacity={0.85}
             >
               <Ionicons name="mic" size={18} color="white" />
@@ -476,6 +554,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
   toggleWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -517,12 +596,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
-  // header
-  headerWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
+  headerWrap: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
   headerGlass: {
     borderRadius: 18,
     overflow: "hidden",
@@ -569,18 +643,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  spark: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.20)",
-    borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.35)",
-  },
 
-  // list
   listWrap: { flex: 1 },
   listContent: { paddingHorizontal: 14, paddingBottom: 12 },
 
@@ -588,12 +651,7 @@ const styles = StyleSheet.create({
   rowLeft: { justifyContent: "flex-start" },
   rowRight: { justifyContent: "flex-end" },
 
-  bubble: {
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-  },
+  bubble: { borderRadius: 18, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1 },
   bubbleLeft: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderColor: "rgba(255,255,255,0.12)",
@@ -609,7 +667,6 @@ const styles = StyleSheet.create({
   textRight: { color: "white" },
   time: { marginTop: 6, fontSize: 10, color: "rgba(255,255,255,0.45)", fontWeight: "800" },
 
-  // empty state
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 26 },
   emptyIcon: {
     width: 60,
@@ -632,7 +689,6 @@ const styles = StyleSheet.create({
     maxWidth: 260,
   },
 
-  // input bar
   inputBar: {
     marginHorizontal: 12,
     marginBottom: 12,
@@ -665,10 +721,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  micBtnActive: {
-    backgroundColor: "rgba(239,68,68,0.16)",
-    borderColor: "rgba(239,68,68,0.30)",
-  },
 
   inputWrap: {
     flex: 1,
@@ -680,13 +732,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   input: { color: "white", fontSize: 15, fontWeight: "800", paddingVertical: 0 },
-
-  miniHint: {
-    marginTop: 6,
-    color: "rgba(255,255,255,0.45)",
-    fontWeight: "800",
-    fontSize: 11,
-  },
 
   sendBtn: {
     width: 46,

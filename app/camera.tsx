@@ -332,6 +332,9 @@ const FACE_IDXS = [
   14, 317, 402, 318, 324, 308,
 ];
 
+const PENDING_DEAF_KEY = "pending_deaf_message_v1";
+
+
 // types for data sent to server
 type WSData = {
   current_sign: string;
@@ -751,6 +754,12 @@ export default function CameraScreen() {
     }
     // Pushing to the TTS output screen
     const url = `/output?text=${encodeURIComponent(finalText)}&autoGoConversation=${isConversationMode}`;
+if (isConversationMode) {
+  await AsyncStorage.setItem(
+    PENDING_DEAF_KEY,
+    JSON.stringify({ text: finalText, ts: Date.now() })
+  );
+}
 
     // Push to output screen
     router.push(url);
